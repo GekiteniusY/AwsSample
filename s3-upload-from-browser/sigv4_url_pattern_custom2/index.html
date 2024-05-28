@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>S3 Upload Form</title>
+  </head>
+  <body>
+    <form
+      id="uploadForm"
+      action="https://your-bucket-name.s3.amazonaws.com/"
+      method="post"
+      enctype="multipart/form-data"
+    >
+      <input
+        type="hidden"
+        name="key"
+        value="user/user1/${filename}"
+      />
+      <input
+        type="hidden"
+        name="acl"
+        value="public-read"
+      />
+      <input
+        type="hidden"
+        name="x-amz-algorithm"
+        value="AWS4-HMAC-SHA256"
+      />
+      <input
+        type="hidden"
+        name="x-amz-credential"
+        value="YOUR_ACCESS_KEY_ID/20201230/us-east-1/s3/aws4_request"
+      />
+      <input
+        type="hidden"
+        name="x-amz-date"
+        value="20201230T000000Z"
+      />
+      <input
+        type="hidden"
+        name="policy"
+      />
+      <input
+        type="hidden"
+        name="x-amz-signature"
+      />
+
+      <input
+        type="file"
+        name="file"
+      />
+      <button type="submit">Upload File</button>
+    </form>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const form = document.getElementById("uploadForm"); // フォームのIDを指定
+
+        form.addEventListener("submit", async function (event) {
+          event.preventDefault();
+
+          const key = "AKIAIOSFODNN7EXAMPLE"; // AWSアクセスキーID
+          const secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"; // AWSシークレットアクセスキー
+          const date = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, "");
+          const shortDate = date.slice(0, 8);
+          const credentialScope = `${shortDate}/us-east-1/s3/aws4_request`;
+
+          const policy = {
+            expiration: "2024-12-30T12:00:00.000Z",
+            conditions: [
+              { bucket: "your-bucket-name" },
+              ["starts-with", "$key", "user/user1/"],
+              { acl: "public-read" },
+              ["content-length-range", 0, 1048576], // 1MBの最大ファイルサイズ
+              { "x-amz-algorithm": "AWS4-HMAC-SHA256" },
+              { "x-amz-credential": `${key}/${credentialScope}` },
+              { "x-amz-date": date },
+            ],
+          };
+
+          const base64Policy = btoa(JSON.stringify(policy));
+          const signingKey = await getSignatureKey(
+            secret,
+            shortDate,
+            "us-east-1",
+            "s3"
+          );
+          const signature = await hmacSHA256(base64Policy, signingKey);
+
+          // フォームデータの準備
+          const formData = new FormData(form);
+          formData.append("Policy", base64Policy);
+          formData.append("X-Amz-Signature", signature);
+
+          // AJAXでファイルをアップロード
+          fetch(form.action, {
+            method: "POST",
+            body: formData,
+          })
+            .then((response) => {
+              console.log("Upload successful!");
+            })
+            .catch((error) => {
+              console.log("Upload failed:", error);
+            });
+        });
+
+        async function getSignatureKey(
+          key,
+          dateStamp,
+          regionName,
+          serviceName
+        ) {
+          const kDate = await hmacSHA256(dateStamp, `AWS4${key}`);
+          const kRegion = await hmacSHA256(regionName, kDate);
+          const kService = await hmacSHA256(serviceName, kRegion);
+          return await hmacSHA256("aws4_request", kService);
+        }
+
+        async function hmacSHA256(data, key) {
+          const encoder = new TextEncoder();
+          const dataArr = encoder.encode(data);
+          const keyArr = encoder.encode(key);
+          const cryptoKey = await crypto.subtle.importKey(
+            "raw",
+            keyArr,
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+          );
+          const signature = await crypto.subtle.sign(
+            "HMAC",
+            cryptoKey,
+            dataArr
+          );
+          return btoa(String.fromCharCode(...new Uint8Array(signature)));
+        }
+      });
+    </script>
+  </body>
+</html>
