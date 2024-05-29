@@ -8,12 +8,16 @@ async function uploadFileUsingSigV4(file, fileName) {
   }
 
   // アクセスキー, シークレットアクセスキーを設定
-  const ACCESS_KEY = "";
-  const SECRET_ACCESS_KEY = "";
+  // const ACCESS_KEY = "";
+  // const SECRET_ACCESS_KEY = "";
+  const ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE";
+  const SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
 
   const ACL = "public-read"; // 'private'も背徹底可能
-  const BUCKET = "your bucket name";
-  const REGION = "your region";
+  // const BUCKET = "your bucket name";
+  // const REGION = "your region";
+  const BUCKET = "sigv4examplebucket";
+  const REGION = "us-east-1";
 
   const DATE = new Date();
   const AMZ_DATE = DATE.toISOString()
@@ -49,26 +53,80 @@ async function uploadFileUsingSigV4(file, fileName) {
     return kSigning;
   }
 
-  // 署名用のポリシーを作成
-  async function encodePolicy() {
-    // ポリシーのオブジェクト
-    const policy = {
-      expiration: new Date(new Date().getTime() + 60 * 1000).toISOString(), // 現時点＋60秒を有効期限に設定
-      conditions: [
-        { acl: ACL },
-        { bucket: BUCKET },
-        { "x-amz-algorithm": "AWS4-HMAC-SHA256" },
-        { "x-amz-credential": `${ACCESS_KEY}/${CREDENTIAL_SCOPE}` },
-        { "x-amz-date": AMZ_DATE },
-        { "x-amz-server-side-encryption": "AES256" },
-      ],
-    };
+  //＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝ポリシーのBase64変換＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 
-    const policyString = JSON.stringify(policy);
-    const policyBase64 = btoa(policyString);
+  // CRLF(キャリッジリターン)：\r\nでないとだめ
+  // https://ja.stackoverflow.com/questions/12897/%E6%94%B9%E8%A1%8C%E3%81%AE-n%E3%81%A8-r-n%E3%81%AE%E9%81%95%E3%81%84%E3%81%AF%E4%BD%95%E3%81%A7%E3%81%99%E3%81%8B
+  function createPolicyString(policyObject) {
+    let policyString =
+      '{ "expiration": "' +
+      policyObject.expiration +
+      '",\r\n  "conditions": [\r\n';
 
-    return policyBase64;
+    policyObject.conditions.forEach((condition, index) => {
+      if (Array.isArray(condition)) {
+        policyString += '    ["' + condition.join('", "') + '"]';
+      } else {
+        const keys = Object.keys(condition);
+        keys.forEach((key, keyIndex) => {
+          if (key === "x-amz-date") {
+            policyString += '    {"' + key + '": "' + condition[key] + '" }';
+          } else if (key === "x-amz-credential") {
+            policyString += "\r\n";
+            policyString += '    {"' + key + '": "' + condition[key] + '"}';
+          } else {
+            policyString += '    {"' + key + '": "' + condition[key] + '"}';
+          }
+          if (keyIndex < keys.length - 1) {
+            policyString += ", ";
+          }
+        });
+      }
+      if (index < policyObject.conditions.length - 1) {
+        policyString += ",\r\n";
+      }
+    });
+
+    policyString += "\r\n  ]\r\n}";
+
+    return policyString;
   }
+
+  // 使用例
+  const policyObject = {
+    expiration: "2015-12-30T12:00:00.000Z",
+    conditions: [
+      { bucket: "sigv4examplebucket" },
+      ["starts-with", "$key", "user/user1/"],
+      { acl: "public-read" },
+      {
+        success_action_redirect:
+          "http://sigv4examplebucket.s3.amazonaws.com/successful_upload.html",
+      },
+      ["starts-with", "$Content-Type", "image/"],
+      { "x-amz-meta-uuid": "14365123651274" },
+      { "x-amz-server-side-encryption": "AES256" },
+      ["starts-with", "$x-amz-meta-tag", ""],
+      {
+        "x-amz-credential":
+          "AKIAIOSFODNN7EXAMPLE/20151229/us-east-1/s3/aws4_request",
+      },
+      { "x-amz-algorithm": "AWS4-HMAC-SHA256" },
+      { "x-amz-date": "20151229T000000Z" },
+    ],
+  };
+
+  function encodePolicyToBase64(policyObject) {
+    const policyString = createPolicyString(policyObject);
+    return btoa(policyString);
+  }
+
+  const policyString = createPolicyString(policyObject);
+  console.log(policyString);
+  const base64EncodedPolicy = encodePolicyToBase64(policyObject);
+  console.log(base64EncodedPolicy);
+
+  //＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝ポリシーのBase64変換＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 
   const TIMEOUT_DURATION = 10000; // 10秒
   const abortController = new AbortController();
@@ -77,7 +135,7 @@ async function uploadFileUsingSigV4(file, fileName) {
   }, TIMEOUT_DURATION);
 
   try {
-    const policy = await encodePolicy();
+    const policy = base64EncodedPolicy;
     const singingKey = await createSigningKey(
       SECRET_ACCESS_KEY,
       AMZ_DATE,
