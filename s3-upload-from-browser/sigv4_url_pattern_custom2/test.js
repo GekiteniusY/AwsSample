@@ -1,3 +1,59 @@
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.getElementById("uploadForm"); // フォームのIDを指定
+
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    const key = "AKIAIOSFODNN7EXAMPLE"; // AWSアクセスキーID
+    const secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"; // AWSシークレットアクセスキー
+    const date = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, "");
+    const shortDate = date.slice(0, 8);
+    const credentialScope = `${shortDate}/us-east-1/s3/aws4_request`;
+
+    const policy = {
+      expiration: "2024-12-30T12:00:00.000Z",
+      conditions: [
+        { bucket: "your-bucket-name" },
+        ["starts-with", "$key", "user/user1/"],
+        { acl: "public-read" },
+        ["content-length-range", 0, 1048576], // 1MBの最大ファイルサイズ
+        { "x-amz-algorithm": "AWS4-HMAC-SHA256" },
+        { "x-amz-credential": `${key}/${credentialScope}` },
+        { "x-amz-date": date },
+      ],
+    };
+
+    const base64Policy = btoa(JSON.stringify(policy));
+    const signingKey = await getSignatureKey(
+      secret,
+      shortDate,
+      "us-east-1",
+      "s3"
+    );
+    const signature = await hmacSHA256(base64Policy, signingKey);
+
+    // フォームデータの準備
+    const formData = new FormData(form);
+    formData.append("Policy", base64Policy);
+    formData.append("X-Amz-Signature", signature);
+
+    // AJAXでファイルをアップロード
+    fetch(form.action, {
+      method: "POST",
+      body: formData,
+    })
+      .then((response) => {
+        console.log("Upload successful!");
+      })
+      .catch((error) => {
+        console.log("Upload failed:", error);
+      });
+  });
+});
+
+// ========================================================================
+// ========================================================================
+
 // 使用例
 const policyObject = {
   expiration: "2015-12-30T12:00:00.000Z",
@@ -67,8 +123,6 @@ console.log(policyString);
 const base64EncodedPolicy = encodePolicyToBase64(policyObject);
 console.log(base64EncodedPolicy);
 
-// ========================================================================
-// ========================================================================
 // ========================================================================
 // ========================================================================
 // ========================================================================
