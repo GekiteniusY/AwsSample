@@ -127,7 +127,7 @@ function createCertificateInfo() {
   // requestDate "2024-06-02T22:00:00.000Z"
   // requestDateYYYYMMDD: 20240602
   // amzRequestDate: 20240602T220000Z
-  const requestDate = new Date("2024-06-02T22:00:00.000Z");
+  const requestDate = new Date();
   const requestDateYYYYMMDD = requestDate
     .toISOString()
     .slice(0, 10)
