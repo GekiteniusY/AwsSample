@@ -1,3 +1,5 @@
+// 成功
+
 const crypto = require("crypto");
 
 // 使用例
@@ -72,7 +74,8 @@ console.log(base64EncodedPolicy);
 
 // ========================================================================
 
-const SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+// const SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+const SECRET_ACCESS_KEY = "XXXXXXXXXXXXXXXXXXX";
 const DATE = new Date("2015-12-29T00:00:00.000Z");
 // CHECK: つまづきポイント
 const AMZ_DATE = DATE.toISOString().slice(0, 10).replace(/-/g, "");
